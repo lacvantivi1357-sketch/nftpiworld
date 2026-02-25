@@ -1,7 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import user_api, game_api
-from database import init_db # QUAN TRỌNG: Phải import init_db
+from database import init_db
+
+# Kéo bot Telegram vào đây
+import asyncio
+from bot import bot, dp 
 
 app = FastAPI(title="Empire V86 API")
 
@@ -18,5 +22,9 @@ app.include_router(game_api.router)
 
 @app.on_event("startup")
 async def startup_event():
-    await init_db() # Chạy tạo bảng database
+    await init_db()
     print("🚀 API Server đã sẵn sàng!")
+    
+    # Kích hoạt Bot Telegram chạy ngầm song song với API
+    print("🤖 Đang khởi động Bot Telegram trên Render...")
+    asyncio.create_task(dp.start_polling(bot))

@@ -1,4 +1,3 @@
-
 const API_URL = "https://nftpiworld.onrender.com";
 
 // Hàm lấy ID thật của người chơi từ Telegram
@@ -27,6 +26,7 @@ async function fetchUserData(userId) {
         return null;
     }
 }
+
 // Thêm hàm này xuống cuối file api.js
 async function huntTreasure(userId, caveChoice) {
     try {
@@ -41,6 +41,7 @@ async function huntTreasure(userId, caveChoice) {
         return { success: false, message: "❌ Lỗi mạng, không thể kết nối tới server!" };
     }
 }
+
 // Lấy danh sách chuồng Pet
 async function fetchUserPets(userId) {
     let response = await fetch(`${API_URL}/api/pets/${userId}`);
@@ -66,6 +67,7 @@ async function equipPet(userId, petId) {
     });
     return await response.json();
 }
+
 // Lấy dữ liệu kho đồ
 async function fetchInventory(userId) {
     let response = await fetch(`${API_URL}/api/inventory/${userId}`);
@@ -81,6 +83,7 @@ async function feedPet(userId) {
     });
     return await response.json();
 }
+
 // Gọi API rèn đồ
 async function craftItem(userId, targetItem, amount) {
     let response = await fetch(`${API_URL}/api/craft`, {
@@ -94,6 +97,7 @@ async function craftItem(userId, targetItem, amount) {
     });
     return await response.json();
 }
+
 // Gọi API bán đồ tại Chợ Đen
 async function sellItem(userId, itemName, amount) {
     let response = await fetch(`${API_URL}/api/market/sell`, {
@@ -107,6 +111,7 @@ async function sellItem(userId, itemName, amount) {
     });
     return await response.json();
 }
+
 async function adminFetchUsers(adminId) {
     let res = await fetch(`${API_URL}/api/admin/all-users?admin_id=${adminId}`);
     return await res.json();
@@ -119,4 +124,38 @@ async function adminEditUser(adminId, targetId, newData) {
         body: JSON.stringify({ admin_id: adminId, target_id: targetId, data: newData })
     });
     return await res.json();
+}
+
+// ==========================================
+// CÁC HÀM MỚI THÊM CHO HỆ THỐNG TÀI CHÍNH
+// ==========================================
+
+// Gọi API gửi yêu cầu Nạp Tiền
+async function requestDeposit(userId, amount, txHash, currency) {
+    let response = await fetch(`${API_URL}/api/finance/deposit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            user_id: userId, 
+            amount: amount, 
+            tx_hash: txHash, 
+            currency: currency 
+        })
+    });
+    return await response.json();
+}
+
+// Gọi API gửi yêu cầu Rút Tiền
+async function requestWithdraw(userId, amountVnt, mode, info) {
+    let response = await fetch(`${API_URL}/api/finance/withdraw`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            user_id: userId, 
+            amount_vnt: amountVnt, 
+            mode: mode, 
+            info: info 
+        })
+    });
+    return await response.json();
 }

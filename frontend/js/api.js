@@ -1,5 +1,5 @@
 
-const API_URL = "https://empire-backend.onrender.com";
+const API_URL = "https://nftpiworld.onrender.com";
 
 // Hàm lấy ID thật của người chơi từ Telegram
 function getTelegramUserId() {

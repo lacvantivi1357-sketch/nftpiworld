@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException
 from database import users_col, pets_col # Import các Collection từ database.py
-
+from config import ADMIN_IDS
+from pydantic import BaseModel
+from bson import ObjectId
 router = APIRouter()
 
 # API Lấy thông tin tổng quan của người chơi (Dùng MongoDB)
@@ -117,3 +119,51 @@ async def request_withdraw(req: WithdrawReq):
     }
     await withdrawals_col.insert_one(new_wd)
     return {"success": True, "message": f"✅ Đã gửi lệnh rút {req.mode}! Thực nhận: {receive_amount:,.0f}"}
+# ==========================================
+# API ADMIN: QUẢN LÝ RÚT TIỀN
+# ==========================================
+
+# 1. Lấy danh sách đơn chờ duyệt
+@router.get("/api/admin/withdrawals")
+async def admin_get_withdrawals(admin_id: int):
+    if admin_id not in ADMIN_IDS:
+        return {"success": False, "message": "Không có quyền truy cập!"}
+    
+    # Lấy data từ collection withdrawals (nhớ import withdrawals_col từ database.py nếu cần, hoặc dùng trực tiếp)
+    from database import withdrawals_col
+    cursor = withdrawals_col.find({"status": "pending"})
+    wds = await cursor.to_list(length=100)
+    
+    # Xử lý ID của MongoDB để Web đọc được
+    for w in wds:
+        w['id'] = str(w['_id'])
+        w.pop('_id')
+        
+    return {"success": True, "withdrawals": wds}
+
+# 2. Xử lý Duyệt hoặc Từ chối
+class AdminActionReq(BaseModel):
+    admin_id: int
+    wd_id: str
+    action: str
+
+@router.post("/api/admin/withdrawals/action")
+async def admin_action_withdrawal(req: AdminActionReq):
+    if req.admin_id not in ADMIN_IDS:
+        return {"success": False, "message": "Không có quyền!"}
+        
+    from database import withdrawals_col, users_col
+    wd = await withdrawals_col.find_one({"_id": ObjectId(req.wd_id)})
+    
+    if not wd or wd.get('status') != "pending":
+        return {"success": False, "message": "❌ Đơn không tồn tại hoặc đã bị xử lý!"}
+        
+    if req.action == "approve":
+        await withdrawals_col.update_one({"_id": ObjectId(req.wd_id)}, {"$set": {"status": "approved"}})
+        return {"success": True, "message": "✅ Đã đánh dấu CHUYỂN KHOẢN THÀNH CÔNG!"}
+        
+    elif req.action == "reject":
+        # Hoàn trả lại tiền VNT vào túi cho người chơi
+        await users_col.update_one({"id": wd['uid']}, {"$inc": {"vnt": wd['amount_vnt']}})
+        await withdrawals_col.update_one({"_id": ObjectId(req.wd_id)}, {"$set": {"status": "rejected"}})
+        return {"success": True, "message": "❌ Đã TỪ CHỐI đơn và hoàn tiền lại cho người chơi!"}

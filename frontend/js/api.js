@@ -159,3 +159,18 @@ async function requestWithdraw(userId, amountVnt, mode, info) {
     });
     return await response.json();
 }
+// Admin lấy danh sách đơn rút tiền
+async function adminFetchWithdrawals(adminId) {
+    let res = await fetch(`${API_URL}/api/admin/withdrawals?admin_id=${adminId}`);
+    return await res.json();
+}
+
+// Admin thao tác (Duyệt/Từ chối)
+async function adminActionWithdrawal(adminId, wdId, action) {
+    let res = await fetch(`${API_URL}/api/admin/withdrawals/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_id: adminId, wd_id: wdId, action: action })
+    });
+    return await res.json();
+}

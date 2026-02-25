@@ -1,0 +1,20 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background-color: #000; /* Màn hình đen */
+    overflow: hidden;       /* Ẩn thanh cuộn */
+    /* Màu chữ mặc định ăn theo theme của Telegram (Sáng/Tối) */
+    color: var(--tg-theme-text-color, #ffffff); 
+}
+
+#game-container {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}

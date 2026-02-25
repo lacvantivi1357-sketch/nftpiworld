@@ -1,0 +1,96 @@
+
+const API_URL = "https://empire-backend.onrender.com";
+
+// Hàm lấy ID thật của người chơi từ Telegram
+function getTelegramUserId() {
+    const tg = window.Telegram.WebApp;
+    // tg.expand() giúp Web App mở full màn hình điện thoại
+    tg.expand(); 
+    
+    // Lấy thông tin user. Nếu mở trên trình duyệt web thường (để test) thì trả về ID Admin ảo.
+    if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+        return tg.initDataUnsafe.user.id;
+    } else {
+        console.warn("Đang chạy ngoài Telegram. Dùng ID Test.");
+        return 6877673260; // Sửa thành ID Telegram của bạn để test
+    }
+}
+
+// Hàm gọi API lấy thông tin nhân vật
+async function fetchUserData(userId) {
+    try {
+        let response = await fetch(`${API_URL}/api/user/${userId}`);
+        if (!response.ok) throw new Error("Network response was not ok");
+        return await response.json();
+    } catch (error) {
+        console.error("Lỗi khi lấy dữ liệu:", error);
+        return null;
+    }
+}
+// Thêm hàm này xuống cuối file api.js
+async function huntTreasure(userId, caveChoice) {
+    try {
+        let response = await fetch(`${API_URL}/api/hunt`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, cave_choice: caveChoice })
+        });
+        return await response.json();
+    } catch (error) {
+        console.error("Lỗi đi săn:", error);
+        return { success: false, message: "❌ Lỗi mạng, không thể kết nối tới server!" };
+    }
+}
+// Lấy danh sách chuồng Pet
+async function fetchUserPets(userId) {
+    let response = await fetch(`${API_URL}/api/pets/${userId}`);
+    return await response.json();
+}
+
+// Mua Pet mới
+async function buyNewPet(userId) {
+    let response = await fetch(`${API_URL}/api/pets/buy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId })
+    });
+    return await response.json();
+}
+
+// Trang bị Pet
+async function equipPet(userId, petId) {
+    let response = await fetch(`${API_URL}/api/pets/equip`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, pet_id: petId })
+    });
+    return await response.json();
+}
+// Lấy dữ liệu kho đồ
+async function fetchInventory(userId) {
+    let response = await fetch(`${API_URL}/api/inventory/${userId}`);
+    return await response.json();
+}
+
+// Cho Pet ăn
+async function feedPet(userId) {
+    let response = await fetch(`${API_URL}/api/pets/feed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId })
+    });
+    return await response.json();
+}
+// Gọi API rèn đồ
+async function craftItem(userId, targetItem, amount) {
+    let response = await fetch(`${API_URL}/api/craft`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            user_id: userId, 
+            target_item: targetItem, 
+            amount: amount 
+        })
+    });
+    return await response.json();
+}

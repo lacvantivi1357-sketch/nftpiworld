@@ -63,3 +63,57 @@ async def admin_edit_user(req: dict):
     
     await users_col.update_one({"id": target_id}, {"$set": update_data})
     return {"success": True, "message": f"✅ Đã cập nhật dữ liệu cho User {target_id}"}
+from datetime import datetime
+
+# --- API NẠP TIỀN (Gửi TxHash) ---
+class DepositReq(BaseModel):
+    user_id: int
+    amount: float
+    tx_hash: str
+    currency: str # USDT, BNB...
+
+@router.post("/api/finance/deposit")
+async def request_deposit(req: DepositReq):
+    new_dep = {
+        "uid": req.user_id,
+        "amount": req.amount,
+        "tx_hash": req.tx_hash,
+        "currency": req.currency,
+        "status": "pending",
+        "created_at": datetime.now()
+    }
+    await deposits_col.insert_one(new_dep)
+    return {"success": True, "message": "⏳ Đã gửi đơn nạp! Vui lòng đợi Admin duyệt."}
+
+# --- API RÚT TIỀN (2 Chế độ) ---
+class WithdrawReq(BaseModel):
+    user_id: int
+    amount_vnt: float
+    mode: str # "normal" hoặc "fast"
+    info: str # STK Ngân hàng hoặc Ví Crypto
+
+@router.post("/api/finance/withdraw")
+async def request_withdraw(req: WithdrawReq):
+    # 1. Check số dư
+    user = await users_col.find_one({"id": req.user_id})
+    if user['vnt'] < req.amount_vnt:
+        return {"success": False, "message": "❌ Số dư VNT không đủ!"}
+    
+    # 2. Tính thực nhận dựa trên Mode (Lightning vs Turtle)
+    fee = 0.3 if req.mode == "fast" else 0.0
+    receive_amount = req.amount_vnt * (1 - fee)
+    
+    # 3. Trừ tiền và lưu đơn
+    await users_col.update_one({"id": req.user_id}, {"$inc": {"vnt": -req.amount_vnt}})
+    
+    new_wd = {
+        "uid": req.user_id,
+        "amount_vnt": req.amount_vnt,
+        "receive": receive_amount,
+        "mode": req.mode,
+        "info": req.info,
+        "status": "pending",
+        "created_at": datetime.now()
+    }
+    await withdrawals_col.insert_one(new_wd)
+    return {"success": True, "message": f"✅ Đã gửi lệnh rút {req.mode}! Thực nhận: {receive_amount:,.0f}"}

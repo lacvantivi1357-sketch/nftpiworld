@@ -107,3 +107,16 @@ async function sellItem(userId, itemName, amount) {
     });
     return await response.json();
 }
+async function adminFetchUsers(adminId) {
+    let res = await fetch(`${API_URL}/api/admin/all-users?admin_id=${adminId}`);
+    return await res.json();
+}
+
+async function adminEditUser(adminId, targetId, newData) {
+    let res = await fetch(`${API_URL}/api/admin/edit-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_id: adminId, target_id: targetId, data: newData })
+    });
+    return await res.json();
+}

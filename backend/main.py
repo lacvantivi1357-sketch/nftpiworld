@@ -22,9 +22,10 @@ app.include_router(game_api.router)
 
 @app.on_event("startup")
 async def startup_event():
+    # 1. Khởi tạo kết nối MongoDB
+    from database import init_db
     await init_db()
-    print("🚀 API Server đã sẵn sàng!")
     
-    # Kích hoạt Bot Telegram chạy ngầm song song với API
-    print("🤖 Đang khởi động Bot Telegram trên Render...")
+    # 2. Chạy Bot Telegram chạy ngầm
+    print("🤖 Bot Telegram đang khởi động song song...")
     asyncio.create_task(dp.start_polling(bot))

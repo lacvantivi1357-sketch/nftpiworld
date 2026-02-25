@@ -87,11 +87,11 @@ class MenuScene extends Phaser.Scene {
         }
 
         // ==========================================
-        // --- 5. VẼ CÁC NÚT ĐIỀU HƯỚNG CHÍNH ---
+        // --- VẼ CÁC NÚT ĐIỀU HƯỚNG CHÍNH ---
         // ==========================================
 
         // NÚT ĐI SĂN
-        let huntBtn = this.add.text(width / 2, height - 220, "[ ⚔️ ĐI SĂN ]", { 
+        let huntBtn = this.add.text(width / 2, height - 290, "[ ⚔️ ĐI SĂN ]", { 
             fontSize: '28px', fontStyle: 'bold', fill: '#ffffff', 
             backgroundColor: '#8b0000', padding: 10, stroke: '#000', strokeThickness: 4
         }).setOrigin(0.5).setInteractive();
@@ -104,7 +104,7 @@ class MenuScene extends Phaser.Scene {
         huntBtn.on('pointerup', () => { huntBtn.setStyle({ backgroundColor: '#8b0000' }); });
 
         // NÚT CHUỒNG PET
-        let petBtn = this.add.text(width / 2, height - 150, "[ 🦁 CHUỒNG PET ]", { 
+        let petBtn = this.add.text(width / 2, height - 230, "[ 🦁 CHUỒNG PET ]", { 
             fontSize: '24px', fontStyle: 'bold', fill: '#fff', 
             backgroundColor: '#00008b', padding: 10, stroke: '#000', strokeThickness: 4
         }).setOrigin(0.5).setInteractive();
@@ -116,12 +116,19 @@ class MenuScene extends Phaser.Scene {
         petBtn.on('pointerup', () => { petBtn.setStyle({ backgroundColor: '#00008b' }); });
 
         // NÚT TÚI ĐỒ (INVENTORY)
-        let invBtn = this.add.text(width / 2, height - 80, "[ 🎒 TÚI ĐỒ ]", { 
+        let invBtn = this.add.text(width / 2, height - 170, "[ 🎒 TÚI ĐỒ ]", { 
             fontSize: '24px', fontStyle: 'bold', fill: '#fff', 
             backgroundColor: '#555500', padding: 10, stroke: '#000', strokeThickness: 4
         }).setOrigin(0.5).setInteractive();
-        // Thêm ngay bên dưới đoạn code của nút Túi Đồ
-        let craftBtn = this.add.text(width / 2, height - 30, "[ 🔥 LÒ RÈN ]", { 
+
+        invBtn.on('pointerdown', () => { 
+            invBtn.setStyle({ backgroundColor: '#333300' });
+            this.scene.start('InventoryScene', { userId: userId }); 
+        });
+        invBtn.on('pointerup', () => { invBtn.setStyle({ backgroundColor: '#555500' }); });
+
+        // NÚT LÒ RÈN (CRAFT)
+        let craftBtn = this.add.text(width / 2, height - 110, "[ 🔥 LÒ RÈN ]", { 
             fontSize: '24px', fontStyle: 'bold', fill: '#fff', 
             backgroundColor: '#aa3300', padding: 10, stroke: '#000', strokeThickness: 4
         }).setOrigin(0.5).setInteractive();
@@ -131,12 +138,18 @@ class MenuScene extends Phaser.Scene {
             this.scene.start('CraftScene', { userId: userId }); 
         });
         craftBtn.on('pointerup', () => { craftBtn.setStyle({ backgroundColor: '#aa3300' }); });
-        invBtn.on('pointerdown', () => { 
-            invBtn.setStyle({ backgroundColor: '#333300' });
-            this.scene.start('InventoryScene', { userId: userId }); 
-        });
-        invBtn.on('pointerup', () => { invBtn.setStyle({ backgroundColor: '#555500' }); });
 
+        // NÚT CHỢ ĐEN (MARKET)
+        let marketBtn = this.add.text(width / 2, height - 50, "[ ⚖️ CHỢ ĐEN ]", { 
+            fontSize: '24px', fontStyle: 'bold', fill: '#fff', 
+            backgroundColor: '#004444', padding: 10, stroke: '#000', strokeThickness: 4
+        }).setOrigin(0.5).setInteractive();
+
+        marketBtn.on('pointerdown', () => { 
+            marketBtn.setStyle({ backgroundColor: '#002222' });
+            this.scene.start('MarketScene', { userId: userId }); 
+        });
+        marketBtn.on('pointerup', () => { marketBtn.setStyle({ backgroundColor: '#004444' }); });
     }
 
     update() {}

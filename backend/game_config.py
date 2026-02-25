@@ -35,3 +35,13 @@ CRAFT_RECIPES = {
     "KimCuong": {"req": "Vang", "amt": 102},  # 102 Vàng -> 1 Kim Cương
     "DaQuy": {"req": "KimCuong", "amt": 11}   # 11 Kim Cương -> 1 Đá Quý
 }
+# --- BẢNG GIÁ CHỢ ĐEN (Bán đồ lấy VNT) ---
+ITEM_PRICES = {
+    "Rac": 1,
+    "Sat": 15,
+    "Dong": 180,
+    "Bac": 1800,
+    "Vang": 25000,
+    "KimCuong": 300000,
+    "DaQuy": 3500000
+}

@@ -3,7 +3,7 @@ from pydantic import BaseModel
 import random
 import time
 from database import db_query
-from game_config import PET_PRICE_VND, PET_NAMES_LIST, PET_WEIGHTS, MIN_HUNGER_TO_HUNT, HUNGER_COST, PET_CONFIG, DROP_QTY_RANGE, ITEM_NAME_MAP, CRAFT_RECIPES
+from game_config import PET_PRICE_VND, PET_NAMES_LIST, PET_WEIGHTS, MIN_HUNGER_TO_HUNT, HUNGER_COST, PET_CONFIG, DROP_QTY_RANGE, ITEM_NAME_MAP, CRAFT_RECIPES, ITEM_PRICES
 router = APIRouter()
 
 # Nhận dữ liệu từ Web (Ví dụ người chơi bấm Hang số 2)
@@ -208,3 +208,41 @@ async def craft_item(req: CraftRequest):
     await db_query("UPDATE inventory SET quantity = quantity + ? WHERE uid=? AND item_name=?", (qty_want, uid, target), commit=True)
     
     return {"success": True, "message": f"🔥 RÈN THÀNH CÔNG!\nChế tạo: +{qty_want:,} {target_name_vn}\nTiêu hao: -{total_req:,} {req_name_vn}"}
+# ==========================================
+# 7. API CHỢ ĐEN (BÁN ĐỒ LẤY VNT)
+# ==========================================
+class SellRequest(BaseModel):
+    user_id: int
+    item_name: str
+    amount: int
+
+@router.post("/api/market/sell")
+async def sell_item(req: SellRequest):
+    uid = req.user_id
+    item = req.item_name
+    qty = req.amount
+    
+    if qty <= 0:
+        return {"success": False, "message": "❌ Số lượng bán phải lớn hơn 0!"}
+        
+    price_per_item = ITEM_PRICES.get(item)
+    if not price_per_item:
+        return {"success": False, "message": "❌ Chợ đen không thu mua vật phẩm này!"}
+        
+    # Kiểm tra kho xem có đủ đồ để bán không
+    inv = await db_query("SELECT quantity FROM inventory WHERE uid=? AND item_name=?", (uid, item), fetchone=True)
+    current_qty = inv['quantity'] if inv else 0
+    
+    item_name_vn = ITEM_NAME_MAP.get(item, item)
+    
+    if current_qty < qty:
+        return {"success": False, "message": f"❌ Bạn không đủ {item_name_vn} để bán!\nCó: {current_qty} | Muốn bán: {qty}"}
+        
+    # Tính tổng tiền nhận được
+    total_vnt = price_per_item * qty
+    
+    # Trừ đồ trong kho và Cộng tiền cho user
+    await db_query("UPDATE inventory SET quantity = quantity - ? WHERE uid=? AND item_name=?", (qty, uid, item), commit=True)
+    await db_query("UPDATE users SET vnt = vnt + ? WHERE id=?", (total_vnt, uid), commit=True)
+    
+    return {"success": True, "message": f"⚖️ BÁN THÀNH CÔNG!\nĐã bán {qty} {item_name_vn}\nThu về: +{total_vnt:,} VNT 💰"}

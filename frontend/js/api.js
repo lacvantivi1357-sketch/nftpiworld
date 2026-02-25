@@ -94,3 +94,16 @@ async function craftItem(userId, targetItem, amount) {
     });
     return await response.json();
 }
+// Gọi API bán đồ tại Chợ Đen
+async function sellItem(userId, itemName, amount) {
+    let response = await fetch(`${API_URL}/api/market/sell`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            user_id: userId, 
+            item_name: itemName, 
+            amount: amount 
+        })
+    });
+    return await response.json();
+}

@@ -9,7 +9,7 @@ const config = {
         height: window.innerHeight
     },
     backgroundColor: '#1a1a2e', // Màu nền tím đen
-    scene: [MenuScene, HuntScene, PetScene, InventoryScene, CraftScene]
+    scene: [MenuScene, HuntScene, PetScene, InventoryScene, CraftScene, MarketScene]
 };
 
 // Kích hoạt Game

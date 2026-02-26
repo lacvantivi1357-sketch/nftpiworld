@@ -1,9 +1,14 @@
-from fastapi import APIRouter
+import asyncio
+from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel
 import random
 import time
 from bson import ObjectId
-from database import users_col, inventory_col, pets_col
+from database import users_col, inventory_col, pets_col, db 
+
+# Khởi tạo collection market (chợ P2P)
+market_col = db["market"]
+
 from game_config import (
     PET_PRICE_VND, PET_NAMES_LIST, PET_WEIGHTS, MIN_HUNGER_TO_HUNT, 
     HUNGER_COST, FEED_PRICE_VNT, PET_CONFIG, DROP_QTY_RANGE, ITEM_NAME_MAP, 
@@ -20,9 +25,217 @@ def clean_doc(doc):
             doc.pop("_id")
     return doc
 
-# ==========================================
-# 1. API ĐI SĂN (HUNT)
-# ==========================================
+# ============================================================
+# 1. ĐỘNG CƠ KINH TẾ NGẦM (MARKET MAKER - CHẠY 24/7)
+# ============================================================
+async def init_system_settings():
+    """Khởi tạo các chỉ số kinh tế mặc định nếu chưa có"""
+    settings = await users_col.find_one({"id": "system_settings"})
+    if not settings:
+        default_settings = {
+            "id": "system_settings",
+            "vnt_rate": 2.0, # 1 VND = 2 VNT
+            "market_fee": 0.05, # Phí sàn 5%
+            # Tổng cung tối đa (Max Supply)
+            "supply_Sat": 10000000, "supply_Dong": 177000, "supply_Bac": 32000,
+            "supply_Vang": 4200, "supply_KimCuong": 600, "supply_DaQuy": 400,
+            # Giá hiện tại (Current Price) - Khởi tạo bằng giá gốc
+            "price_Sat": ITEM_PRICES["Sat"], "price_Dong": ITEM_PRICES["Dong"],
+            "price_Bac": ITEM_PRICES["Bac"], "price_Vang": ITEM_PRICES["Vang"],
+            "price_KimCuong": ITEM_PRICES["KimCuong"], "price_DaQuy": ITEM_PRICES["DaQuy"]
+        }
+        await users_col.insert_one(default_settings)
+
+async def get_circulating_supply():
+    """Hàm quét toàn server tính lượng hàng đang lưu thông (Túi + Chợ)"""
+    circulating = {k: 0 for k in ITEM_PRICES.keys() if k != "Rac"}
+    
+    # 1. Quét trong túi đồ người chơi
+    inv_agg = await inventory_col.aggregate([
+        {"$group": {"_id": "$item_name", "total": {"$sum": "$quantity"}}}
+    ]).to_list(None)
+    for i in inv_agg:
+        if i["_id"] in circulating: circulating[i["_id"]] += i["total"]
+
+    # 2. Quét trên chợ P2P
+    mkt_agg = await market_col.aggregate([
+        {"$match": {"status": "selling"}},
+        {"$group": {"_id": "$item_name", "total": {"$sum": "$quantity"}}}
+    ]).to_list(None)
+    for m in mkt_agg:
+        if m["_id"] in circulating: circulating[m["_id"]] += m["total"]
+        
+    return circulating
+
+async def market_maker_worker():
+    """Worker chạy ngầm tính toán lại giá cả cứ mỗi 10 phút"""
+    while True:
+        try:
+            await init_system_settings()
+            settings = await users_col.find_one({"id": "system_settings"})
+            circulating = await get_circulating_supply()
+            
+            updates = {}
+            for code, base_p in ITEM_PRICES.items():
+                if code == "Rac": continue
+                
+                max_s = settings.get(f"supply_{code}", 0)
+                curr_s = circulating.get(code, 0)
+                
+                # Thuật toán tính giá: Giá gốc * (Tổng cung / (Lưu hành * Hệ số 1.2))
+                if curr_s > 0 and max_s > 0:
+                    free_p = base_p * (max_s / (curr_s * 1.2))
+                else:
+                    free_p = base_p * 10.0 # Hiếm quá thì giá x10
+                
+                # Đáy giá: Không bao giờ rớt quá 50% giá gốc để giữ kinh tế
+                final_p = max(free_p, base_p * 0.5)
+                updates[f"price_{code}"] = round(final_p, 4)
+            
+            # Cập nhật giá mới vào DB
+            await users_col.update_one({"id": "system_settings"}, {"$set": updates})
+            
+            # Đợi 10 phút (600 giây) rồi tính lại
+            await asyncio.sleep(600)
+        except Exception as e:
+            print(f"Lỗi Market Maker: {e}")
+            await asyncio.sleep(60)
+
+# Kích hoạt Worker khi FastAPI khởi động
+@router.on_event("startup")
+async def startup_event():
+    asyncio.create_task(market_maker_worker())
+
+# ============================================================
+# 2. API KINH TẾ & CHỢ (TOKENOMICS, P2P, BÁN HỆ THỐNG)
+# ============================================================
+
+@router.get("/api/market/tokenomics")
+async def get_tokenomics():
+    settings = await users_col.find_one({"id": "system_settings"})
+    if not settings: 
+        await init_system_settings()
+        settings = await users_col.find_one({"id": "system_settings"})
+    
+    circulating = await get_circulating_supply()
+    
+    stats = {}
+    for code in ITEM_PRICES.keys():
+        if code == "Rac": continue
+        stats[code] = {
+            "circ": circulating.get(code, 0),
+            "max": settings.get(f"supply_{code}", 0),
+            "price": settings.get(f"price_{code}", ITEM_PRICES[code])
+        }
+        
+    return {"success": True, "vnt_rate": settings.get("vnt_rate", 2.0), "stats": stats}
+
+
+@router.get("/api/market/p2p")
+async def get_p2p_market():
+    # Chỉ lấy 20 đơn mới nhất đang bán
+    cursor = market_col.find({"status": "selling"}).sort("_id", -1).limit(20)
+    listings = await cursor.to_list(length=20)
+    return {"success": True, "listings": [clean_doc(l) for l in listings]}
+
+
+@router.post("/api/market/p2p/sell")
+async def sell_p2p_item(req: dict):
+    uid = req.get('user_id')
+    item = req.get('item_name')
+    qty = float(req.get('amount', 0))
+    price = float(req.get('price', 0))
+    
+    if qty <= 0 or price <= 0: 
+        return {"success": False, "message": "❌ Số lượng/Giá không hợp lệ!"}
+    
+    # Kiểm tra kho
+    inv = await inventory_col.find_one({"uid": uid, "item_name": item})
+    if not inv or inv.get('quantity', 0) < qty:
+        return {"success": False, "message": "❌ Không đủ hàng trong kho!"}
+        
+    # Trừ đồ và đăng lên chợ
+    await inventory_col.update_one({"uid": uid, "item_name": item}, {"$inc": {"quantity": -qty}})
+    
+    new_order = {
+        "seller_id": uid, "item_name": item, "quantity": qty, 
+        "price": price, "status": "selling", 
+        "created_at": int(time.time())
+    }
+    await market_col.insert_one(new_order)
+    return {"success": True, "message": f"✅ Đã treo {qty} {ITEM_NAME_MAP.get(item, item)} lên chợ giá {price:,} VNT!"}
+
+
+@router.post("/api/market/p2p/buy")
+async def buy_p2p_item(req: dict):
+    buyer_id = req.get('user_id')
+    order_id = req.get('order_id')
+    
+    order = await market_col.find_one({"_id": ObjectId(order_id)})
+    if not order or order.get('status') != 'selling':
+        return {"success": False, "message": "❌ Đơn hàng không tồn tại hoặc đã bị mua!"}
+        
+    if buyer_id == order['seller_id']:
+        return {"success": False, "message": "❌ Bạn không thể tự mua đồ của mình!"}
+        
+    # Check tiền người mua
+    buyer = await users_col.find_one({"id": buyer_id})
+    price = order['price']
+    if not buyer or buyer.get('vnt', 0) < price:
+        return {"success": False, "message": "❌ Không đủ VNT để mua!"}
+        
+    # Xử lý giao dịch (Trừ phí sàn 5%)
+    settings = await users_col.find_one({"id": "system_settings"})
+    fee_rate = settings.get('market_fee', 0.05) if settings else 0.05
+    receive_vnt = price * (1 - fee_rate)
+    
+    seller_id = order['seller_id']
+    item_name = order['item_name']
+    qty = order['quantity']
+    
+    # 1. Trừ VNT người mua, Cộng VNT người bán
+    await users_col.update_one({"id": buyer_id}, {"$inc": {"vnt": -price}})
+    await users_col.update_one({"id": seller_id}, {"$inc": {"vnt": receive_vnt}})
+    
+    # 2. Cộng đồ cho người mua
+    await inventory_col.update_one({"uid": buyer_id, "item_name": item_name}, {"$inc": {"quantity": qty}}, upsert=True)
+    
+    # 3. Đóng đơn hàng
+    await market_col.update_one({"_id": ObjectId(order_id)}, {"$set": {"status": "sold", "buyer_id": buyer_id}})
+    
+    return {"success": True, "message": "✅ Giao dịch mua P2P thành công!"}
+
+
+@router.post("/api/market/sell")
+async def sell_item_to_system(req: dict):
+    uid = req.get('user_id')
+    item = req.get('item_name')
+    qty = float(req.get('amount', 1))
+    
+    inv = await inventory_col.find_one({"uid": uid, "item_name": item})
+    if not inv or inv.get('quantity', 0) < qty:
+        return {"success": False, "message": "❌ Không đủ đồ trong kho!"}
+        
+    # LẤY GIÁ ĐỘNG TỪ HỆ THỐNG THAY VÌ GIÁ CỐ ĐỊNH
+    settings = await users_col.find_one({"id": "system_settings"})
+    if item == "Rac":
+        price_per_item = ITEM_PRICES.get("Rac", 1) # Rác giá luôn cố định
+    else:
+        price_per_item = settings.get(f"price_{item}", ITEM_PRICES.get(item, 1)) if settings else ITEM_PRICES.get(item, 1)
+        
+    total_vnt = price_per_item * qty
+    
+    # Trừ đồ và cộng VNT
+    await inventory_col.update_one({"uid": uid, "item_name": item}, {"$inc": {"quantity": -qty}})
+    await users_col.update_one({"id": uid}, {"$inc": {"vnt": total_vnt}})
+    
+    item_name_vn = ITEM_NAME_MAP.get(item, item)
+    return {"success": True, "message": f"⚖️ Bán cho Hệ thống: {qty} {item_name_vn}\nThu về: +{total_vnt:,.2f} VNT"}
+
+
+# ============================================================
+# 3. API ĐI SĂN (HUNT)
+# ============================================================
 class HuntRequest(BaseModel):
     user_id: int
     cave_choice: int
@@ -91,16 +304,16 @@ async def process_hunt(req: HuntRequest):
         )
         return {"success": True, "message": f"🌑 TRƯỢT RỒI! Nhặt được {qty_rac:,} Rác.", "item": "Rac", "qty": qty_rac}
 
-# ==========================================
-# 2. API QUẢN LÝ PET (GET, BUY, EQUIP, FEED)
-# ==========================================
+
+# ============================================================
+# 4. API QUẢN LÝ PET (GET, BUY, EQUIP, FEED)
+# ============================================================
 @router.get("/api/pets/{user_id}")
 async def get_user_pets(user_id: int):
     cursor = pets_col.find({"uid": user_id}).sort("is_active", -1)
     pets = await cursor.to_list(length=100)
     return {"success": True, "pets": [clean_doc(p) for p in pets]}
 
-# Tách riêng class này để sửa lỗi 422 lúc nãy
 class BuyPetReq(BaseModel):
     user_id: int
 
@@ -143,7 +356,7 @@ class FeedPetReq(BaseModel):
 @router.post("/api/pets/feed")
 async def feed_pet(req: FeedPetReq):
     uid = req.user_id
-    price = FEED_PRICE_VNT # Đã lấy chuẩn từ game_config
+    price = FEED_PRICE_VNT 
     
     user = await users_col.find_one({"id": uid})
     if not user or user.get('vnt', 0) < price:
@@ -155,9 +368,9 @@ async def feed_pet(req: FeedPetReq):
         return {"success": True, "message": "✅ Pet đã no nê! (+100% Độ no)"}
     return {"success": False, "message": "❌ Không tìm thấy Pet đang trang bị!"}
 
-# ==========================================
-# 3. API KHO ĐỒ, LÒ RÈN & CHỢ ĐEN
-# ==========================================
+# ============================================================
+# 5. API KHO ĐỒ & LÒ RÈN
+# ============================================================
 @router.get("/api/inventory/{user_id}")
 async def get_inventory(user_id: int):
     cursor = inventory_col.find({"uid": user_id, "quantity": {"$gt": 0}})
@@ -184,23 +397,3 @@ async def craft_item(req: dict):
     await inventory_col.update_one({"uid": uid, "item_name": recipe['req']}, {"$inc": {"quantity": -total_req}})
     await inventory_col.update_one({"uid": uid, "item_name": target}, {"$inc": {"quantity": qty}}, upsert=True)
     return {"success": True, "message": f"🔥 Rèn thành công {qty} {ITEM_NAME_MAP.get(target, target)}!"}
-
-@router.post("/api/market/sell")
-async def sell_item(req: dict):
-    uid = req.get('user_id')
-    item = req.get('item_name')
-    qty = int(req.get('amount', 1))
-    
-    inv = await inventory_col.find_one({"uid": uid, "item_name": item})
-    if not inv or inv.get('quantity', 0) < qty:
-        return {"success": False, "message": "❌ Không đủ đồ trong kho!"}
-        
-    price_per_item = ITEM_PRICES.get(item, 1)
-    total_vnt = price_per_item * qty
-    
-    # Trừ đồ và cộng VNT
-    await inventory_col.update_one({"uid": uid, "item_name": item}, {"$inc": {"quantity": -qty}})
-    await users_col.update_one({"id": uid}, {"$inc": {"vnt": total_vnt}})
-    
-    item_name_vn = ITEM_NAME_MAP.get(item, item)
-    return {"success": True, "message": f"⚖️ Đã bán {qty} {item_name_vn}\nThu về: +{total_vnt:,} VNT"}

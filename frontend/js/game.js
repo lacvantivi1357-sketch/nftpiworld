@@ -9,7 +9,8 @@ const config = {
         height: window.innerHeight
     },
     backgroundColor: '#1a1a2e', // Màu nền tím đen
-    scene: [MenuScene, HuntScene, PetScene, InventoryScene, CraftScene, MarketScene, AdminScene,FinanceScene]
+    // Đã khai báo thêm GuildScene vào cuối danh sách
+    scene: [MenuScene, HuntScene, PetScene, InventoryScene, CraftScene, MarketScene, AdminScene, FinanceScene, GuildScene]
 };
 
 // Kích hoạt Game

@@ -174,3 +174,65 @@ async function adminActionWithdrawal(adminId, wdId, action) {
     });
     return await res.json();
 }
+// Admin lấy danh sách đơn NẠP TIỀN
+async function adminFetchDeposits(adminId) {
+    let res = await fetch(`${API_URL}/api/admin/deposits?admin_id=${adminId}`);
+    return await res.json();
+}
+
+// Admin thao tác (Duyệt/Từ chối) đơn NẠP TIỀN
+async function adminActionDeposit(adminId, depId, action) {
+    let res = await fetch(`${API_URL}/api/admin/deposits/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_id: adminId, dep_id: depId, action: action })
+    });
+    return await res.json();
+}
+// Lấy danh sách ví hệ thống (Để hiển thị cho khách nạp)
+async function fetchSystemWallets() {
+    let res = await fetch(`${API_URL}/api/system/wallets`);
+    return await res.json();
+}
+
+// Admin lưu cấu hình ví mới
+async function adminUpdateWallets(adminId, walletsData) {
+    let res = await fetch(`${API_URL}/api/admin/wallets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_id: adminId, wallets: walletsData })
+    });
+    return await res.json();
+}
+// --- API KINH TẾ & THỊ TRƯỜNG P2P ---
+// Lấy bảng thống kê Tokenomics (Cung cầu, Giá động)
+async function fetchTokenomics() {
+    let res = await fetch(`${API_URL}/api/market/tokenomics`);
+    return await res.json();
+}
+
+// Lấy danh sách hàng đang bán trên Chợ P2P
+async function fetchP2PMarket() {
+    let res = await fetch(`${API_URL}/api/market/p2p`);
+    return await res.json();
+}
+
+// Đăng bán vật phẩm lên Chợ P2P
+async function sellP2PItem(userId, itemName, amount, priceVnt) {
+    let res = await fetch(`${API_URL}/api/market/p2p/sell`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, item_name: itemName, amount: amount, price: priceVnt })
+    });
+    return await res.json();
+}
+
+// Mua vật phẩm từ Chợ P2P
+async function buyP2PItem(userId, orderId) {
+    let res = await fetch(`${API_URL}/api/market/p2p/buy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, order_id: orderId })
+    });
+    return await res.json();
+}

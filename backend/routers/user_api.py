@@ -133,3 +133,66 @@ async def admin_action_withdrawal(req: AdminActionReq):
         await users_col.update_one({"id": wd['uid']}, {"$inc": {"vnt": wd['amount_vnt']}})
         await withdrawals_col.update_one({"_id": ObjectId(req.wd_id)}, {"$set": {"status": "rejected"}})
         return {"success": True, "message": "❌ Đã TỪ CHỐI và hoàn tiền VNT!"}
+# --- LẤY DANH SÁCH ĐƠN NẠP ---
+@router.get("/api/admin/deposits")
+async def admin_get_deposits(admin_id: int):
+    if admin_id not in ADMIN_IDS:
+        return {"success": False}
+    cursor = deposits_col.find({"status": "pending"})
+    deps = await cursor.to_list(length=100)
+    return {"success": True, "deposits": [clean_doc(d) for d in deps]}
+
+class AdminDepositActionReq(BaseModel):
+    admin_id: int
+    dep_id: str
+    action: str
+
+# --- DUYỆT HOẶC TỪ CHỐI ĐƠN NẠP ---
+@router.post("/api/admin/deposits/action")
+async def admin_action_deposit(req: AdminDepositActionReq):
+    if req.admin_id not in ADMIN_IDS:
+        return {"success": False, "message": "Không có quyền!"}
+        
+    dep = await deposits_col.find_one({"_id": ObjectId(req.dep_id)})
+    if not dep or dep.get('status') != "pending":
+        return {"success": False, "message": "❌ Đơn không tồn tại hoặc đã xử lý!"}
+        
+    if req.action == "approve":
+        # DUYỆT: Cộng tiền VND cho khách
+        await users_col.update_one({"id": dep['uid']}, {"$inc": {"vnd": dep['amount']}})
+        await deposits_col.update_one({"_id": ObjectId(req.dep_id)}, {"$set": {"status": "approved"}})
+        return {"success": True, "message": f"✅ Đã DUYỆT!\nCộng {dep['amount']:,} VND cho User {dep['uid']}"}
+    
+    elif req.action == "reject":
+        # TỪ CHỐI: Huỷ đơn, không cộng tiền
+        await deposits_col.update_one({"_id": ObjectId(req.dep_id)}, {"$set": {"status": "rejected"}})
+        return {"success": True, "message": "❌ Đã TỪ CHỐI đơn nạp!"}
+# ==========================================
+# 5. API CÀI ĐẶT VÍ HỆ THỐNG (DÀNH CHO ADMIN)
+# ==========================================
+@router.get("/api/system/wallets")
+async def get_system_wallets():
+    doc = await users_col.find_one({"id": "system_wallets"})
+    if not doc:
+        doc = {
+            "bank": "Chưa cài đặt", "momo": "Chưa cài đặt", 
+            "usdt_bep20": "Chưa cài đặt", "trx": "Chưa cài đặt", 
+            "ton": "Chưa cài đặt", "btc": "Chưa cài đặt"
+        }
+    return {"success": True, "wallets": clean_doc(doc)}
+
+@router.post("/api/admin/wallets")
+async def update_system_wallets(req: dict):
+    admin_id = req.get("admin_id")
+    if admin_id not in ADMIN_IDS:
+        return {"success": False, "message": "Không có quyền!"}
+        
+    wallets = req.get("wallets", {})
+    wallets["id"] = "system_wallets" # Khóa cứng ID để không bị lỗi
+    
+    await users_col.update_one(
+        {"id": "system_wallets"}, 
+        {"$set": wallets}, 
+        upsert=True
+    )
+    return {"success": True, "message": "✅ Đã lưu cấu hình Ví thành công!"}

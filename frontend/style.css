@@ -2,13 +2,20 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    /* Ngăn người chơi vô tình bôi đen (copy) các phần tử trên Web */
+    user-select: none; 
+    -webkit-user-select: none;
+    /* Tắt cái chớp màu xanh lè trên Android khi bấm vào nút */
+    -webkit-tap-highlight-color: transparent; 
 }
 
 body {
     background-color: #000; /* Màn hình đen */
     overflow: hidden;       /* Ẩn thanh cuộn */
-    /* Màu chữ mặc định ăn theo theme của Telegram (Sáng/Tối) */
     color: var(--tg-theme-text-color, #ffffff); 
+    
+    /* QUAN TRỌNG: Khóa chết màn hình, chống vuốt ngược (Pull-to-refresh) hoặc zoom trên điện thoại */
+    touch-action: none; 
 }
 
 #game-container {
@@ -17,4 +24,11 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
+}
+
+/* Giúp canvas của game tự động co giãn vừa mọi loại màn hình */
+canvas {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
 }

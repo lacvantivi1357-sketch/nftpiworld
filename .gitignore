@@ -1,4 +1,4 @@
-venv/
-__pycache__/
+# File: .gitignore
 .env
-bot_data.db
+__pycache__/
+*.pyc
